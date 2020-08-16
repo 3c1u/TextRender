@@ -18,14 +18,6 @@ FontRasterizer *GetCurrentRasterizer();
 
 using RgbColor = uint32_t;
 
-template <class T>
-using Option                  = std::optional<T>;
-constexpr std::nullopt_t None = std::nullopt;
-template <class T>
-Option<T> Some(T &&t) {
-  return t;
-}
-
 struct TextRenderDefault {
   bool     bold        = false;    // 太字
   int      fontSize    = 24;       // フォントサイズ
@@ -51,20 +43,20 @@ struct TextRenderOptions {
 };
 
 struct CharacterInfo {
-  bool               bold     = false;       // 太字
-  bool               italic   = false;       // 斜体
-  bool               graph    = false;       // グラフィック文字
-  bool               vertical = false;       // 縦書き
-  Option<tjs_string> face = Some(TJS_W("")); // フォントフェイス名？
+  bool                      bold     = false; // 太字
+  bool                      italic   = false; // 斜体
+  bool                      graph    = false; // グラフィック文字
+  bool                      vertical = false; // 縦書き
+  std::optional<tjs_string> face = TJS_W(""); // フォントフェイス名？
 
   int x    = 0; // X座標
   int y    = 0; // Y座標
   int cw   = 0; // 文字幅
   int size = 0; // フォントサイズ？
 
-  RgbColor         color  = 0xffffff; // 文字色
-  Option<RgbColor> edge   = None;     // 縁の色
-  Option<RgbColor> shadow = None;     // 影の色
+  RgbColor                color  = 0xffffff;     // 文字色
+  std::optional<RgbColor> edge   = std::nullopt; // 縁の色
+  std::optional<RgbColor> shadow = std::nullopt; // 影の色
 };
 
 /**
