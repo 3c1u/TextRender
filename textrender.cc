@@ -66,39 +66,68 @@ using RgbColor = uint32_t;
 
 #define setprop_t(d, p, ty)                                                    \
   {                                                                            \
-    tTJSVariant v(static_cast<ty>(p));                                         \
+    tTJSVariant v(ty(p));                                                      \
     d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);                   \
   }
 
-#define setprop(d, p)                                                          \
-  {                                                                            \
-    tTJSVariant v(p);                                                          \
+#define setprop_opt_t(d, p, ty)                                                \
+  if (p != std::nullopt) {                                                     \
+    tTJSVariant v(ty(*p));                                                     \
+    d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);                   \
+  } else {                                                                     \
+    tTJSVariant v;                                                             \
     d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);                   \
   }
 
-#define getprop(d, p)                                                          \
-  {                                                                            \
-    tTJSVariant v;                                                             \
-    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {             \
-      p = v;                                                                   \
-    }                                                                          \
-  }
+#define setprop(d, p) setprop_t(d, p, )
 
-#define getprop_ensure_deref(d, p, e)                                          \
-  {                                                                            \
-    tTJSVariant v;                                                             \
-    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {             \
-      auto ens = v.e;                                                          \
-      if (ens)                                                                 \
-        p = *ens;                                                              \
-    }                                                                          \
-  }
+#define setprop_opt(d, p) setprop_opt_t(d, p, )
 
 #define getprop_t(d, p, ty)                                                    \
   {                                                                            \
     tTJSVariant v;                                                             \
-    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {             \
+    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d)) &&             \
+        v.Type() != tvtVoid) {                                                 \
       p = ty(v);                                                               \
+    }                                                                          \
+  }
+
+#define getprop_opt_t(d, p, ty)                                                \
+  {                                                                            \
+    tTJSVariant v;                                                             \
+    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d)) &&             \
+        v.Type() != tvtVoid) {                                                 \
+      p = ty(v);                                                               \
+    } else {                                                                   \
+      p = std::nullopt;                                                        \
+    }                                                                          \
+  }
+
+#define getprop_ensure_opt_deref(d, p, e)                                      \
+  {                                                                            \
+    tTJSVariant v;                                                             \
+    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d)) &&             \
+        v.Type() != tvtVoid) {                                                 \
+      auto ens = v.e;                                                          \
+      if (ens)                                                                 \
+        p = *ens;                                                              \
+      else                                                                     \
+        p = std::nullopt;                                                      \
+    } else {                                                                   \
+      p = std::nullopt;                                                        \
+    }                                                                          \
+  }
+
+#define getprop(d, p) getprop_t(d, p, )
+
+#define getprop_ensure_deref(d, p, e)                                          \
+  {                                                                            \
+    tTJSVariant v;                                                             \
+    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d)) &&             \
+        v.Type() != tvtVoid) {                                                 \
+      auto ens = v.e;                                                          \
+      if (ens)                                                                 \
+        p = *ens;                                                              \
     }                                                                          \
   }
 
@@ -116,18 +145,20 @@ struct TextRenderState {
   int      pitch       = 0;        // 行間
   int      lineSize    = 0;        // ラインの高さ
 
+  // -------------------------------------------------------------- //
+
   tTJSVariant serialize() const {
     auto dict = TJSCreateDictionaryObject();
 
     setprop(dict, bold);
     setprop(dict, fontSize);
-    setprop_t(dict, chColor, tjs_int);
+    setprop_t(dict, chColor, static_cast<tjs_int>);
     setprop(dict, rubySize);
     setprop(dict, rubyOffset);
     setprop(dict, shadow);
-    setprop_t(dict, shadowColor, tjs_int);
+    setprop_t(dict, shadowColor, static_cast<tjs_int>);
     setprop(dict, edge);
-    setprop_t(dict, edgeColor, tjs_int);
+    setprop_t(dict, edgeColor, static_cast<tjs_int>);
     setprop(dict, lineSpacing);
     setprop(dict, pitch);
     setprop(dict, lineSize);
@@ -143,13 +174,13 @@ struct TextRenderState {
 
     getprop(dict, bold);
     getprop(dict, fontSize);
-    getprop_t(dict, chColor, tjs_int);
+    getprop_t(dict, chColor, static_cast<tjs_int>);
     getprop(dict, rubySize);
     getprop(dict, rubyOffset);
     getprop(dict, shadow);
-    getprop_t(dict, shadowColor, tjs_int);
+    getprop_t(dict, shadowColor, static_cast<tjs_int>);
     getprop(dict, edge);
-    getprop_t(dict, edgeColor, tjs_int);
+    getprop_t(dict, edgeColor, static_cast<tjs_int>);
     getprop(dict, lineSpacing);
     getprop(dict, pitch);
     getprop(dict, lineSize);
@@ -169,6 +200,8 @@ struct TextRenderOptions {
   tjs_string leading = TJS_W("\\$([{｢‘“（〔［｛〈《「『【￥＄￡");
   tjs_string begin = TJS_W("「『（‘“〔［｛〈《");
   tjs_string end   = TJS_W("」』）’”〕］｝〉》");
+
+  // -------------------------------------------------------------- //
 
   tTJSVariant serialize() const {
     auto dict = TJSCreateDictionaryObject();
@@ -217,6 +250,57 @@ struct CharacterInfo {
   RgbColor                color  = 0xffffff;     // 文字色
   std::optional<RgbColor> edge   = std::nullopt; // 縁の色
   std::optional<RgbColor> shadow = std::nullopt; // 影の色
+
+  // -------------------------------------------------------------- //
+
+  tTJSVariant serialize() const {
+    auto dict = TJSCreateDictionaryObject();
+
+    setprop(dict, bold);
+    setprop(dict, italic);
+    setprop(dict, graph);
+    setprop(dict, vertical);
+    setprop(dict, x);
+    setprop(dict, y);
+    setprop(dict, cw);
+    setprop(dict, size);
+    setprop_opt(dict, face);
+
+    setprop_t(dict, color, static_cast<tjs_int>);
+
+    setprop_opt_t(dict, edge, static_cast<tjs_int>);
+    setprop_opt_t(dict, shadow, static_cast<tjs_int>);
+
+    return tTJSVariant(dict, dict);
+  }
+
+  void deserialize(tTJSVariant t) {
+    auto dict = t.AsObjectNoAddRef();
+    if (!dict) {
+      return;
+    }
+
+    getprop(dict, bold);
+    getprop(dict, italic);
+    getprop(dict, graph);
+    getprop(dict, vertical);
+    getprop(dict, x);
+    getprop(dict, y);
+    getprop(dict, cw);
+    getprop(dict, size);
+    getprop_ensure_opt_deref(dict, face, AsStringNoAddRef());
+
+    getprop_t(dict, color, static_cast<tjs_int>);
+
+    getprop_opt_t(dict, edge, static_cast<tjs_int>);
+    getprop_opt_t(dict, shadow, static_cast<tjs_int>);
+  }
+
+  static TextRenderState from(tTJSVariant t) {
+    TextRenderState state{};
+    state.deserialize(t);
+    return state;
+  }
 };
 
 /**
