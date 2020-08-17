@@ -64,27 +64,42 @@ FontRasterizer *GetCurrentRasterizer();
 
 using RgbColor = uint32_t;
 
-#define setprop_t(d, p, v, ty)                                                 \
-  v = static_cast<ty>(p);                                                      \
-  d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);
-
-#define setprop(d, p, v)                                                       \
-  v = p;                                                                       \
-  d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);
-
-#define getprop(d, p, v)                                                       \
-  if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {               \
-    p = v;                                                                     \
+#define setprop_t(d, p, ty)                                                    \
+  {                                                                            \
+    tTJSVariant v(static_cast<ty>(p));                                         \
+    d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);                   \
   }
 
-#define getprop_ensure(d, p, v, e)                                             \
-  if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {               \
-    p = v.e;                                                                   \
+#define setprop(d, p)                                                          \
+  {                                                                            \
+    tTJSVariant v(p);                                                          \
+    d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);                   \
   }
 
-#define getprop_t(d, p, v, ty)                                                 \
-  if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {               \
-    p = ty(v);                                                                 \
+#define getprop(d, p)                                                          \
+  {                                                                            \
+    tTJSVariant v;                                                             \
+    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {             \
+      p = v;                                                                   \
+    }                                                                          \
+  }
+
+#define getprop_ensure_deref(d, p, e)                                          \
+  {                                                                            \
+    tTJSVariant v;                                                             \
+    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {             \
+      auto ens = v.e;                                                          \
+      if (ens)                                                                 \
+        p = *ens;                                                              \
+    }                                                                          \
+  }
+
+#define getprop_t(d, p, ty)                                                    \
+  {                                                                            \
+    tTJSVariant v;                                                             \
+    if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {             \
+      p = ty(v);                                                               \
+    }                                                                          \
   }
 
 struct TextRenderState {
@@ -102,44 +117,45 @@ struct TextRenderState {
   int      lineSize    = 0;        // ラインの高さ
 
   tTJSVariant serialize() const {
-    auto        dict = TJSCreateDictionaryObject();
-    tTJSVariant v;
+    auto dict = TJSCreateDictionaryObject();
 
-    setprop(dict, bold, v);
-    setprop(dict, fontSize, v);
-    setprop_t(dict, chColor, v, tjs_int);
-    setprop(dict, rubySize, v);
-    setprop(dict, rubyOffset, v);
-    setprop(dict, shadow, v);
-    setprop_t(dict, shadowColor, v, tjs_int);
-    setprop(dict, edge, v);
-    setprop_t(dict, edgeColor, v, tjs_int);
-    setprop(dict, lineSpacing, v);
-    setprop(dict, pitch, v);
-    setprop(dict, lineSize, v);
+    setprop(dict, bold);
+    setprop(dict, fontSize);
+    setprop_t(dict, chColor, tjs_int);
+    setprop(dict, rubySize);
+    setprop(dict, rubyOffset);
+    setprop(dict, shadow);
+    setprop_t(dict, shadowColor, tjs_int);
+    setprop(dict, edge);
+    setprop_t(dict, edgeColor, tjs_int);
+    setprop(dict, lineSpacing);
+    setprop(dict, pitch);
+    setprop(dict, lineSize);
 
     return tTJSVariant(dict, dict);
   }
 
-  TextRenderState deserialize(tTJSVariant t) {
-    auto        dict = t.AsObjectNoAddRef();
-    tTJSVariant v;
+  void deserialize(tTJSVariant t) {
+    auto dict = t.AsObjectNoAddRef();
+    if (!dict) {
+      return;
+    }
 
-    getprop(dict, bold, v);
-    getprop(dict, fontSize, v);
-    getprop_t(dict, chColor, v, tjs_int);
-    getprop(dict, rubySize, v);
-    getprop(dict, rubyOffset, v);
-    getprop(dict, shadow, v);
-    getprop_t(dict, shadowColor, v, tjs_int);
-    getprop(dict, edge, v);
-    getprop_t(dict, edgeColor, v, tjs_int);
-    getprop(dict, lineSpacing, v);
-    getprop(dict, pitch, v);
-    getprop(dict, lineSize, v);
+    getprop(dict, bold);
+    getprop(dict, fontSize);
+    getprop_t(dict, chColor, tjs_int);
+    getprop(dict, rubySize);
+    getprop(dict, rubyOffset);
+    getprop(dict, shadow);
+    getprop_t(dict, shadowColor, tjs_int);
+    getprop(dict, edge);
+    getprop_t(dict, edgeColor, tjs_int);
+    getprop(dict, lineSpacing);
+    getprop(dict, pitch);
+    getprop(dict, lineSize);
   }
 
-  static TextRenderState deserialize(tTJSVariant t) {
+  static TextRenderState from(tTJSVariant t) {
     TextRenderState state{};
     state.deserialize(t);
     return state;
@@ -155,28 +171,29 @@ struct TextRenderOptions {
   tjs_string end   = TJS_W("」』）’”〕］｝〉》");
 
   tTJSVariant serialize() const {
-    auto        dict = TJSCreateDictionaryObject();
-    tTJSVariant v;
+    auto dict = TJSCreateDictionaryObject();
 
-    setprop(dict, following, v);
-    setprop(dict, leading, v);
-    setprop(dict, begin, v);
-    setprop(dict, end, v);
+    setprop(dict, following);
+    setprop(dict, leading);
+    setprop(dict, begin);
+    setprop(dict, end);
 
     return tTJSVariant(dict, dict);
   }
 
-  TextRenderState deserialize(tTJSVariant t) {
-    auto        dict = t.AsObjectNoAddRef();
-    tTJSVariant v;
+  void deserialize(tTJSVariant t) {
+    auto dict = t.AsObjectNoAddRef();
+    if (!dict) {
+      return;
+    }
 
-    getprop_ensure(dict, following, v, AsStringNoAddRef()->LongString);
-    getprop_ensure(dict, leading, v, AsStringNoAddRef()->LongString);
-    getprop_ensure(dict, begin, v, AsStringNoAddRef()->LongString);
-    getprop_ensure(dict, end, v, AsStringNoAddRef()->LongString);
+    getprop_ensure_deref(dict, following, AsStringNoAddRef());
+    getprop_ensure_deref(dict, leading, AsStringNoAddRef());
+    getprop_ensure_deref(dict, begin, AsStringNoAddRef());
+    getprop_ensure_deref(dict, end, AsStringNoAddRef());
   }
 
-  static TextRenderState deserialize(tTJSVariant t) {
+  static TextRenderState from(tTJSVariant t) {
     TextRenderState state{};
     state.deserialize(t);
     return state;
@@ -226,9 +243,9 @@ private:
   int m_x = 0;
   int m_y = 0;
 
-  TextRenderOptions m_options;
-  TextRenderState   m_default;
-  TextRenderState   m_state;
+  TextRenderOptions m_options{};
+  TextRenderState   m_default{};
+  TextRenderState   m_state{};
 
   std::vector<CharacterInfo> m_characters;
 };
@@ -555,14 +572,44 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
       }
       break;
     }
-    case '&':
+    case '&': {
       // '&' .+ ';'
-      break;
-    case '$':
-      // '$' .+ ';'
+      tjs_string graph{};
 
-      // onEvalで評価？
+      while (true) {
+        if (!readchar(text, i, ch)) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse: expected character, found EOF"));
+        }
+
+        if (ch == ';')
+          break;
+
+        graph += ch;
+      }
+
       break;
+    }
+    case '$': {
+      // '&' .+ ';'
+      tjs_string varName{};
+
+      while (true) {
+        if (!readchar(text, i, ch)) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse: expected character, found EOF"));
+        }
+
+        if (ch == ';')
+          break;
+
+        varName += ch;
+      }
+
+      break;
+    }
     default:
     __draw_normal:
       // タダの文字として処理する
@@ -586,10 +633,12 @@ void TextRenderBase::setRenderSize(int width, int height) {
 
 void TextRenderBase::setDefault(tTJSVariant defaultSettings) {
   TVPAddLog(TJS_W("set default format"));
+  m_default.deserialize(defaultSettings);
 }
 
 void TextRenderBase::setOption(tTJSVariant options) {
   TVPAddLog(TJS_W("set option"));
+  m_options.deserialize(options);
 }
 
 tTJSVariant TextRenderBase::getCharacters(int start, int end) {
