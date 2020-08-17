@@ -64,6 +64,29 @@ FontRasterizer *GetCurrentRasterizer();
 
 using RgbColor = uint32_t;
 
+#define setprop_t(d, p, v, ty)                                                 \
+  v = static_cast<ty>(p);                                                      \
+  d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);
+
+#define setprop(d, p, v)                                                       \
+  v = p;                                                                       \
+  d->PropSet(TJS_MEMBERENSURE, TJS_W(#p), nullptr, &v, d);
+
+#define getprop(d, p, v)                                                       \
+  if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {               \
+    p = v;                                                                     \
+  }
+
+#define getprop_ensure(d, p, v, e)                                             \
+  if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {               \
+    p = v.e;                                                                   \
+  }
+
+#define getprop_t(d, p, v, ty)                                                 \
+  if (TJS_SUCCEEDED(d->PropGet(0, TJS_W(#p), nullptr, &v, d))) {               \
+    p = ty(v);                                                                 \
+  }
+
 struct TextRenderState {
   bool     bold        = false;    // 太字
   int      fontSize    = 24;       // フォントサイズ
@@ -77,6 +100,50 @@ struct TextRenderState {
   int      lineSpacing = 6;        // 行間
   int      pitch       = 0;        // 行間
   int      lineSize    = 0;        // ラインの高さ
+
+  tTJSVariant serialize() const {
+    auto        dict = TJSCreateDictionaryObject();
+    tTJSVariant v;
+
+    setprop(dict, bold, v);
+    setprop(dict, fontSize, v);
+    setprop_t(dict, chColor, v, tjs_int);
+    setprop(dict, rubySize, v);
+    setprop(dict, rubyOffset, v);
+    setprop(dict, shadow, v);
+    setprop_t(dict, shadowColor, v, tjs_int);
+    setprop(dict, edge, v);
+    setprop_t(dict, edgeColor, v, tjs_int);
+    setprop(dict, lineSpacing, v);
+    setprop(dict, pitch, v);
+    setprop(dict, lineSize, v);
+
+    return tTJSVariant(dict, dict);
+  }
+
+  TextRenderState deserialize(tTJSVariant t) {
+    auto        dict = t.AsObjectNoAddRef();
+    tTJSVariant v;
+
+    getprop(dict, bold, v);
+    getprop(dict, fontSize, v);
+    getprop_t(dict, chColor, v, tjs_int);
+    getprop(dict, rubySize, v);
+    getprop(dict, rubyOffset, v);
+    getprop(dict, shadow, v);
+    getprop_t(dict, shadowColor, v, tjs_int);
+    getprop(dict, edge, v);
+    getprop_t(dict, edgeColor, v, tjs_int);
+    getprop(dict, lineSpacing, v);
+    getprop(dict, pitch, v);
+    getprop(dict, lineSize, v);
+  }
+
+  static TextRenderState deserialize(tTJSVariant t) {
+    TextRenderState state{};
+    state.deserialize(t);
+    return state;
+  }
 };
 
 struct TextRenderOptions {
@@ -86,6 +153,34 @@ struct TextRenderOptions {
   tjs_string leading = TJS_W("\\$([{｢‘“（〔［｛〈《「『【￥＄￡");
   tjs_string begin = TJS_W("「『（‘“〔［｛〈《");
   tjs_string end   = TJS_W("」』）’”〕］｝〉》");
+
+  tTJSVariant serialize() const {
+    auto        dict = TJSCreateDictionaryObject();
+    tTJSVariant v;
+
+    setprop(dict, following, v);
+    setprop(dict, leading, v);
+    setprop(dict, begin, v);
+    setprop(dict, end, v);
+
+    return tTJSVariant(dict, dict);
+  }
+
+  TextRenderState deserialize(tTJSVariant t) {
+    auto        dict = t.AsObjectNoAddRef();
+    tTJSVariant v;
+
+    getprop_ensure(dict, following, v, AsStringNoAddRef()->LongString);
+    getprop_ensure(dict, leading, v, AsStringNoAddRef()->LongString);
+    getprop_ensure(dict, begin, v, AsStringNoAddRef()->LongString);
+    getprop_ensure(dict, end, v, AsStringNoAddRef()->LongString);
+  }
+
+  static TextRenderState deserialize(tTJSVariant t) {
+    TextRenderState state{};
+    state.deserialize(t);
+    return state;
+  }
 };
 
 // [LEADING] [NORMAL] [FOLLOWING] の形になるように文字をセグメンテーションする．
@@ -500,6 +595,7 @@ void TextRenderBase::setOption(tTJSVariant options) {
 tTJSVariant TextRenderBase::getCharacters(int start, int end) {
   // TODO:
   auto array = TJSCreateArrayObject();
+  TVPAddLog(TVPFormatMessage(TJS_W("get characters: [%1, %2]"), start, end));
   return tTJSVariant(array, array);
 }
 
