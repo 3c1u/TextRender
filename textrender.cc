@@ -54,6 +54,8 @@
 
 #include "ncbind/ncbind.hpp"
 
+#include "DebugIntf.h"
+
 #include <optional>
 
 // use Kirikiri-Z rasterizer for layouting
@@ -159,6 +161,37 @@ static bool readchar(tTJSString const &str, size_t &i, tjs_char &c) {
   return true;
 }
 
+static void read_integer(tTJSString const &str, size_t &i, int &value) {
+  tjs_char ch;
+  bool     is_negative = false;
+
+  while (true) {
+    if (!readchar(str, i, ch)) {
+      TVPThrowExceptionMessage(
+          TJS_W("TextRenderBase::render() failed to "
+                "parse: expected either integer or ';', found EOF"));
+    }
+
+    if ('0' <= ch && ch <= '9') {
+      value = value * 10 + (ch - '0');
+      continue;
+    } else if (ch == '-') {
+      is_negative = !is_negative;
+      continue;
+    } else if (ch == ';') {
+      if (is_negative) {
+        value = -value;
+      }
+      return;
+    }
+
+    TVPThrowExceptionMessage(
+        TJS_W("TextRenderBase::render() failed to "
+              "parse: expected either integer or ';', found '%1'"),
+        ch);
+  }
+}
+
 bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
                             bool same) {
   // ラスタライザの取得
@@ -178,6 +211,162 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
       }
 
       switch (ch) {
+      case 'f': // フォントフェイス
+      {
+        tjs_string faceName{};
+
+        while (true) {
+          if (!readchar(text, i, ch)) {
+            TVPThrowExceptionMessage(
+                TJS_W("TextRenderBase::render() failed to "
+                      "parse: expected character, found EOF"));
+          }
+
+          if (ch == ';')
+            break;
+
+          faceName += ch;
+        }
+
+        TVPAddLog(
+            TVPFormatMessage(TJS_W("change font face name: %1"), faceName));
+
+        break;
+      }
+      case 'b': // フォントの装飾
+      {
+        if (!readchar(text, i, ch) && (ch == '0' || ch == '1')) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse %%b: expected either '0' or '1', found EOF"));
+        }
+        bool flag = ch == '1';
+        if (flag)
+          TVPAddLog(TJS_W("set bold"));
+        else
+          TVPAddLog(TJS_W("unset bold"));
+        break;
+      }
+      case 'i': {
+        if (!readchar(text, i, ch) && (ch == '0' || ch == '1')) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse %%i: expected either '0' or '1', found EOF"));
+        }
+        bool flag = ch == '1';
+        if (flag)
+          TVPAddLog(TJS_W("set italic (oblique)"));
+        else
+          TVPAddLog(TJS_W("unset italic (oblique)"));
+        break;
+      }
+      case 's': {
+        if (!readchar(text, i, ch) && (ch == '0' || ch == '1')) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse %%s: expected either '0' or '1', found EOF"));
+        }
+        bool flag = ch == '1';
+        if (flag)
+          TVPAddLog(TJS_W("set shadow"));
+        else
+          TVPAddLog(TJS_W("unset shadow"));
+        break;
+      }
+      case 'e': {
+        if (!readchar(text, i, ch) && (ch == '0' || ch == '1')) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse %%e: expected either '0' or '1', found '%1'"),
+              ch);
+        }
+        bool flag = ch == '1';
+        if (flag)
+          TVPAddLog(TJS_W("set edge"));
+        else
+          TVPAddLog(TJS_W("unset edge"));
+        break;
+      }
+      case 'B': // Big
+        TVPAddLog(TJS_W("big font"));
+        break;
+      case 'S': // Small
+        TVPAddLog(TJS_W("small font"));
+        break;
+      case 'r': // Reset
+        TVPAddLog(TJS_W("reset"));
+        break;
+      case 'C': // Centre
+        TVPAddLog(TJS_W("centre"));
+        break;
+      case 'R': // Right
+        TVPAddLog(TJS_W("right"));
+        break;
+      case 'L': // Left
+        TVPAddLog(TJS_W("left"));
+        break;
+      case 'p': // ピッチ，%p[0-9]+;
+      {
+        int value = 0;
+        read_integer(text, i, value);
+        //
+        break;
+      }
+      case 'd': // 文字あたり表示時間指定，%d[0-9]+;
+      {
+        int value = 0;
+        read_integer(text, i, value);
+        //
+        break;
+      }
+      case 'w': // 時間待ち，%w[0-9]+;
+      {
+        int value = 0;
+        read_integer(text, i, value);
+        //
+        break;
+      }
+      case 'D': // %D[0-9]+; || %D$.+;
+      {
+        if (ch == '$') {
+          tjs_string labelName{};
+
+          while (true) {
+            if (!readchar(text, i, ch)) {
+              TVPThrowExceptionMessage(
+                  TJS_W("TextRenderBase::render() failed to "
+                        "parse: expected character, found EOF"));
+            }
+
+            if (ch == ';')
+              break;
+
+            labelName += ch;
+          }
+
+          // labelName
+
+        } else {
+          int value = 0;
+          read_integer(text, i, value);
+        }
+        //
+        break;
+      }
+      case '0':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+      case '6':
+      case '7':
+      case '8':
+      case '9': {
+        int value = static_cast<int>(ch - '0');
+        read_integer(text, i, value);
+        break;
+      }
       default:
         TVPThrowExceptionMessage(
             TJS_W("TextRenderBase::render() failed to "
@@ -219,13 +408,58 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         break;
       }
       break;
-    case '[':
+    case '[': {
       // [ .* ]
       // [ .*, [0-9]+ ]
+      tjs_string ruby{};
+
+      while (true) {
+        if (!readchar(text, i, ch)) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse: expected character, found EOF"));
+        }
+
+        if (ch == ']')
+          break;
+
+        ruby += ch;
+      }
       break;
-    case '#':
-      // '#' [0-9a-fA-F]+ ';'
+    }
+    case '#': {
+      // [ .* ]
+      // [ .*, [0-9]+ ]
+      RgbColor colour = 0x00;
+
+      while (true) {
+        if (!readchar(text, i, ch)) {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse: expected character, found EOF"));
+        }
+
+        if (ch == ';')
+          break;
+
+        RgbColor c = 0;
+        if ('0' <= ch && ch <= '9') {
+          c = static_cast<RgbColor>(ch - '0');
+        } else if ('A' <= ch && ch <= 'F') {
+          c = 0x0a + static_cast<RgbColor>(ch - 'A');
+        } else if ('a' <= ch && ch <= 'f') {
+          c = 0x0a + static_cast<RgbColor>(ch - 'a');
+        } else {
+          TVPThrowExceptionMessage(
+              TJS_W("TextRenderBase::render() failed to "
+                    "parse: expected hexademical number, found '%1'"),
+              ch);
+        }
+
+        colour = (colour << 4) || c;
+      }
       break;
+    }
     case '&':
       // '&' .+ ';'
       break;
@@ -236,6 +470,8 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
       break;
     default:
     __draw_normal:
+      // タダの文字として処理する
+      TVPAddLog(TVPFormatMessage(TJS_W("process character: %1"), ch));
       break;
     }
   }
@@ -247,15 +483,18 @@ void TextRenderBase::setRenderSize(int width, int height) {
   m_boxWidth  = width;
   m_boxHeight = height;
 
+  TVPAddLog(
+      TVPFormatMessage(TJS_W("set render size: (%1, %2)"), width, height));
+
   clear();
 }
 
 void TextRenderBase::setDefault(tTJSVariant defaultSettings) {
-  // TODO:
+  TVPAddLog(TJS_W("set default format"));
 }
 
 void TextRenderBase::setOption(tTJSVariant options) {
-  // TODO:
+  TVPAddLog(TJS_W("set option"));
 }
 
 tTJSVariant TextRenderBase::getCharacters(int start, int end) {
@@ -266,10 +505,12 @@ tTJSVariant TextRenderBase::getCharacters(int start, int end) {
 
 void TextRenderBase::clear() {
   // TODO:
+  TVPAddLog(TJS_W("clear character buffer and format"));
 }
 
 void TextRenderBase::done() {
   // TODO:
+  TVPAddLog(TJS_W("flush character buffer"));
 }
 
 // register the class
