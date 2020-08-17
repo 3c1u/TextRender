@@ -233,8 +233,6 @@ struct TextRenderOptions {
   }
 };
 
-// [LEADING] [NORMAL] [FOLLOWING] の形になるように文字をセグメンテーションする．
-
 struct CharacterInfo {
   bool                      bold     = false; // 太字
   bool                      italic   = false; // 斜体
@@ -327,11 +325,19 @@ private:
   int m_x = 0;
   int m_y = 0;
 
+  int  m_indent   = 0;
+  bool m_overflow = false;
+
   TextRenderOptions m_options{};
   TextRenderState   m_default{};
   TextRenderState   m_state{};
 
   std::vector<CharacterInfo> m_characters;
+  tjs_string                 m_buffer{};
+  uint32_t                   m_mode = 0;
+
+  void pushCharacter(tjs_char ch);
+  void flush();
 };
 
 constexpr size_t kTextRenderMaxSegmentLength = 2;
@@ -341,6 +347,16 @@ enum TextRenderAlignment {
   kTextRenderAlignmentCenter = 0,
   kTextRenderAlignmentRight  = 1,
 };
+
+// [LEADING] [NORMAL] [FOLLOWING] の形になるように文字をセグメンテーションする．
+
+enum TextRenderMode {
+  kTextRenderModeLeading = 0,
+  kTextRenderModeNormal,
+  kTextRenderModeFollowing,
+};
+
+// -------------------------------------------------------------------
 
 TextRenderBase::TextRenderBase() {}
 
@@ -648,7 +664,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         } else {
           TVPThrowExceptionMessage(
               TJS_W("TextRenderBase::render() failed to "
-                    "parse: expected hexademical number, found '%1'"),
+                    "parse: expected hexadecimal number, found '%1'"),
               ch);
         }
 
@@ -697,12 +713,65 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
     default:
     __draw_normal:
       // タダの文字として処理する
-      TVPAddLog(TVPFormatMessage(TJS_W("process character: %1"), ch));
+      pushCharacter(ch);
       break;
     }
   }
 
-  return true;
+  return !m_overflow;
+}
+
+void TextRenderBase::pushCharacter(tjs_char ch) {
+  if ((0xD800 <= ch <= 0xDBFF) /* upper surrogate-pair */
+      && (0xDC00 <= ch <= 0xDFFF) /* lower surrogate-pair */) {
+    TVPThrowExceptionMessage(TJS_W("unexpected character: surrogate pair"));
+  }
+
+  auto isLeadingChar = m_options.leading.find_first_of(ch) != std::string::npos;
+  auto isFollowingChar =
+      m_options.following.find_first_of(ch) != std::string::npos;
+  auto isIndent     = m_options.begin.find_first_of(ch) != std::string::npos;
+  auto isIndentDecr = m_options.end.find_first_of(ch) != std::string::npos;
+
+  uint32_t current;
+
+  if (isLeadingChar) {
+    current = kTextRenderModeLeading;
+  } else if (isFollowingChar) {
+    current = kTextRenderModeFollowing;
+  } else {
+    current = kTextRenderModeNormal;
+  }
+
+  switch (current) {
+  case kTextRenderModeLeading:
+    break;
+  case kTextRenderModeNormal:
+    break;
+  case kTextRenderModeFollowing:
+    break;
+  default:
+    TVPThrowExceptionMessage(TJS_W("unreachable code"));
+    break;
+  }
+
+  m_mode = current;
+
+  if (isIndent) {
+    ++m_indent;
+  }
+
+  if (isIndentDecr && m_indent > 0) {
+    --m_indent;
+  }
+}
+
+void TextRenderBase::flush() {
+  if (m_buffer.empty()) {
+    return;
+  }
+
+  // try
 }
 
 void TextRenderBase::setRenderSize(int width, int height) {
@@ -740,6 +809,7 @@ void TextRenderBase::clear() {
 void TextRenderBase::done() {
   // TODO:
   TVPAddLog(TJS_W("flush character buffer"));
+  flush();
 }
 
 // register the class
