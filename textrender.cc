@@ -133,6 +133,7 @@ using RgbColor = uint32_t;
 
 struct TextRenderState {
   bool     bold        = false;    // 太字
+  bool     italic      = false;    // 斜体
   int      fontSize    = 24;       // フォントサイズ
   RgbColor chColor     = 0xffffff; // 文字色
   int      rubySize    = 10;       // ルビの大きさ
@@ -151,6 +152,7 @@ struct TextRenderState {
     auto dict = TJSCreateDictionaryObject();
 
     setprop(dict, bold);
+    setprop(dict, italic);
     setprop(dict, fontSize);
     setprop_t(dict, chColor, static_cast<tjs_int>);
     setprop(dict, rubySize);
@@ -173,6 +175,7 @@ struct TextRenderState {
     }
 
     getprop(dict, bold);
+    getprop(dict, italic);
     getprop(dict, fontSize);
     getprop_t(dict, chColor, static_cast<tjs_int>);
     getprop(dict, rubySize);
@@ -249,6 +252,8 @@ struct CharacterInfo {
   std::optional<RgbColor> edge   = std::nullopt; // 縁の色
   std::optional<RgbColor> shadow = std::nullopt; // 影の色
 
+  tjs_string text = TJS_W(""); // 文字
+
   // -------------------------------------------------------------- //
 
   tTJSVariant serialize() const {
@@ -265,9 +270,10 @@ struct CharacterInfo {
     setprop_opt(dict, face);
 
     setprop_t(dict, color, static_cast<tjs_int>);
-
     setprop_opt_t(dict, edge, static_cast<tjs_int>);
     setprop_opt_t(dict, shadow, static_cast<tjs_int>);
+
+    setprop(dict, text);
 
     return tTJSVariant(dict, dict);
   }
@@ -289,9 +295,10 @@ struct CharacterInfo {
     getprop_ensure_opt_deref(dict, face, AsStringNoAddRef());
 
     getprop_t(dict, color, static_cast<tjs_int>);
-
     getprop_opt_t(dict, edge, static_cast<tjs_int>);
     getprop_opt_t(dict, shadow, static_cast<tjs_int>);
+
+    getprop_ensure_deref(dict, text, AsStringNoAddRef());
   }
 
   static TextRenderState from(tTJSVariant t) {
@@ -318,6 +325,10 @@ public:
   void        clear();
   void        done();
 
+  // property accessor
+  bool getVertical() const { return m_vertical; }
+  void setVertical(bool v) { m_vertical = v; }
+
 private:
   int m_boxWidth  = 0;
   int m_boxHeight = 0;
@@ -327,6 +338,8 @@ private:
 
   int  m_indent   = 0;
   bool m_overflow = false;
+
+  bool m_vertical = false;
 
   TextRenderOptions m_options{};
   TextRenderState   m_default{};
@@ -722,8 +735,8 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
 }
 
 void TextRenderBase::pushCharacter(tjs_char ch) {
-  if ((0xD800 <= ch <= 0xDBFF) /* upper surrogate-pair */
-      && (0xDC00 <= ch <= 0xDFFF) /* lower surrogate-pair */) {
+  if ((0xD800 <= ch && ch <= 0xDBFF) /* upper surrogate-pair */
+      || (0xDC00 <= ch && ch <= 0xDFFF) /* lower surrogate-pair */) {
     TVPThrowExceptionMessage(TJS_W("unexpected character: surrogate pair"));
   }
 
@@ -734,6 +747,42 @@ void TextRenderBase::pushCharacter(tjs_char ch) {
   auto isIndentDecr = m_options.end.find_first_of(ch) != std::string::npos;
 
   uint32_t current;
+
+  auto rasterizer = GetCurrentRasterizer();
+  int  advance_width, advance_height;
+
+  rasterizer->GetTextExtent(ch, advance_width, advance_height);
+
+  auto new_x       = advance_width + m_x;
+  auto text_height = rasterizer->GetAscentHeight();
+
+  if (m_boxWidth < new_x) {
+    m_x = 0;
+    new_x = advance_width;
+    m_y += text_height;
+  }
+
+  CharacterInfo info {
+      .bold     = m_state.bold,
+      .italic   = m_state.italic,
+      .graph    = false,
+      .vertical = false,
+      .face     = TJS_W("user"),
+      .x        = m_x,
+      .y        = m_y,
+      .cw       = advance_width,
+      .size     = text_height,
+      .color    = m_state.chColor,
+      .edge =
+          m_state.edge ? std::make_optional(m_state.edgeColor) : (std::nullopt),
+      .shadow = m_state.shadow ? std::make_optional(m_state.shadowColor)
+                               : (std::nullopt),
+      .text = (tjs_string() + ch),
+  };
+
+  m_characters.push_back(info);
+
+  m_x = new_x;
 
   if (isLeadingChar) {
     current = kTextRenderModeLeading;
@@ -798,12 +847,25 @@ tTJSVariant TextRenderBase::getCharacters(int start, int end) {
   // TODO:
   auto array = TJSCreateArrayObject();
   TVPAddLog(TVPFormatMessage(TJS_W("get characters: [%1, %2]"), start, end));
+
+  if ((end < start) || (start == 0 && end == 0)) {
+    for (size_t i = 0, cnt = m_characters.size(); i < cnt; ++i) {
+      auto ch = m_characters[i].serialize();
+      array->PropSetByNum(TJS_MEMBERENSURE, i, &ch, array);
+    }
+  }
+
   return tTJSVariant(array, array);
 }
 
 void TextRenderBase::clear() {
   // TODO:
   TVPAddLog(TJS_W("clear character buffer and format"));
+
+  m_characters.clear();
+
+  m_x = 0;
+  m_y = 0;
 }
 
 void TextRenderBase::done() {
@@ -823,4 +885,6 @@ NCB_REGISTER_CLASS(TextRenderBase) {
   NCB_METHOD(getCharacters);
   NCB_METHOD(clear);
   NCB_METHOD(done);
+
+  NCB_PROPERTY(vertical, getVertical, setVertical);
 };
