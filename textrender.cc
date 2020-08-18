@@ -132,19 +132,20 @@ using RgbColor = uint32_t;
   }
 
 struct TextRenderState {
-  bool     bold        = false;    // 太字
-  bool     italic      = false;    // 斜体
-  int      fontSize    = 24;       // フォントサイズ
-  RgbColor chColor     = 0xffffff; // 文字色
-  int      rubySize    = 10;       // ルビの大きさ
-  int      rubyOffset  = -2;       // ルビのオフセット
-  bool     shadow      = true;     // 影
-  RgbColor shadowColor = 0x000000; // 影の色
-  bool     edge        = false;    // 縁取り
-  RgbColor edgeColor   = 0x0080ff; // 縁の色
-  int      lineSpacing = 6;        // 行間
-  int      pitch       = 0;        // 行間
-  int      lineSize    = 0;        // ラインの高さ
+  bool       bold        = false;         // 太字
+  bool       italic      = false;         // 斜体
+  tjs_string face        = TJS_W("user"); // フォントフェイス
+  int        fontSize    = 24;            // フォントサイズ
+  RgbColor   chColor     = 0xffffff;      // 文字色
+  int        rubySize    = 10;            // ルビの大きさ
+  int        rubyOffset  = -2;            // ルビのオフセット
+  bool       shadow      = true;          // 影
+  RgbColor   shadowColor = 0x000000;      // 影の色
+  bool       edge        = false;         // 縁取り
+  RgbColor   edgeColor   = 0x0080ff;      // 縁の色
+  int        lineSpacing = 6;             // 行間
+  int        pitch       = 0;             // 行間
+  int        lineSize    = 0;             // ラインの高さ
 
   // -------------------------------------------------------------- //
 
@@ -154,6 +155,7 @@ struct TextRenderState {
     setprop(dict, bold);
     setprop(dict, italic);
     setprop(dict, fontSize);
+    setprop(dict, face);
     setprop_t(dict, chColor, static_cast<tjs_int>);
     setprop(dict, rubySize);
     setprop(dict, rubyOffset);
@@ -165,7 +167,10 @@ struct TextRenderState {
     setprop(dict, pitch);
     setprop(dict, lineSize);
 
-    return tTJSVariant(dict, dict);
+    auto res = tTJSVariant(dict, dict);
+    dict->Release();
+
+    return res;
   }
 
   void deserialize(tTJSVariant t) {
@@ -177,6 +182,7 @@ struct TextRenderState {
     getprop(dict, bold);
     getprop(dict, italic);
     getprop(dict, fontSize);
+    getprop_ensure_deref(dict, face, AsStringNoAddRef());
     getprop_t(dict, chColor, static_cast<tjs_int>);
     getprop(dict, rubySize);
     getprop(dict, rubyOffset);
@@ -214,7 +220,10 @@ struct TextRenderOptions {
     setprop(dict, begin);
     setprop(dict, end);
 
-    return tTJSVariant(dict, dict);
+    auto res = tTJSVariant(dict, dict);
+    dict->Release();
+
+    return res;
   }
 
   void deserialize(tTJSVariant t) {
@@ -237,11 +246,11 @@ struct TextRenderOptions {
 };
 
 struct CharacterInfo {
-  bool                      bold     = false; // 太字
-  bool                      italic   = false; // 斜体
-  bool                      graph    = false; // グラフィック文字
-  bool                      vertical = false; // 縦書き
-  std::optional<tjs_string> face = TJS_W(""); // フォントフェイス名？
+  bool       bold     = false;         // 太字
+  bool       italic   = false;         // 斜体
+  bool       graph    = false;         // グラフィック文字
+  bool       vertical = false;         // 縦書き
+  tjs_string face     = TJS_W("user"); // フォントフェイス名？
 
   int x    = 0; // X座標
   int y    = 0; // Y座標
@@ -267,7 +276,7 @@ struct CharacterInfo {
     setprop(dict, y);
     setprop(dict, cw);
     setprop(dict, size);
-    setprop_opt(dict, face);
+    setprop(dict, face);
 
     setprop_t(dict, color, static_cast<tjs_int>);
     setprop_opt_t(dict, edge, static_cast<tjs_int>);
@@ -275,7 +284,10 @@ struct CharacterInfo {
 
     setprop(dict, text);
 
-    return tTJSVariant(dict, dict);
+    auto res = tTJSVariant(dict, dict);
+    dict->Release();
+
+    return res;
   }
 
   void deserialize(tTJSVariant t) {
@@ -292,7 +304,7 @@ struct CharacterInfo {
     getprop(dict, y);
     getprop(dict, cw);
     getprop(dict, size);
-    getprop_ensure_opt_deref(dict, face, AsStringNoAddRef());
+    getprop_ensure_deref(dict, face, AsStringNoAddRef());
 
     getprop_t(dict, color, static_cast<tjs_int>);
     getprop_opt_t(dict, edge, static_cast<tjs_int>);
@@ -419,8 +431,7 @@ static void read_integer(tTJSString const &str, size_t &i, int &value) {
 
 bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
                             bool same) {
-  // ラスタライザの取得
-  auto rasterizer = GetCurrentRasterizer();
+  // 入力のパース
 
   auto const len = text.GetLen();
 
@@ -650,6 +661,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
 
         ruby += ch;
       }
+
+      // TODO: implement ruby
+
       break;
     }
     case '#': {
@@ -683,6 +697,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
 
         colour = (colour << 4) || c;
       }
+
+      m_state.chColor = colour;
+
       break;
     }
     case '&': {
@@ -702,6 +719,8 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         graph += ch;
       }
 
+      // TODO: implement graphical characters
+
       break;
     }
     case '$': {
@@ -720,6 +739,8 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
 
         varName += ch;
       }
+
+      // TODO: implement eval
 
       break;
     }
@@ -757,12 +778,12 @@ void TextRenderBase::pushCharacter(tjs_char ch) {
   auto text_height = rasterizer->GetAscentHeight();
 
   if (m_boxWidth < new_x) {
-    m_x = 0;
+    m_x   = 0;
     new_x = advance_width;
     m_y += text_height;
   }
 
-  CharacterInfo info {
+  CharacterInfo info{
       .bold     = m_state.bold,
       .italic   = m_state.italic,
       .graph    = false,
@@ -859,13 +880,29 @@ tTJSVariant TextRenderBase::getCharacters(int start, int end) {
 }
 
 void TextRenderBase::clear() {
-  // TODO:
   TVPAddLog(TJS_W("clear character buffer and format"));
 
   m_characters.clear();
 
+  m_state    = m_default;
+  m_overflow = false;
+
+  // カーソル位置を戻す
   m_x = 0;
   m_y = 0;
+
+  // ラスタライザを指定された書式で初期化
+  auto rasterizer = GetCurrentRasterizer();
+  auto font       = tTVPFont{
+      .Height = m_state.fontSize, // height of text
+      .Flags  = static_cast<tjs_uint32>((m_state.bold ? TVP_TF_BOLD : 0) |
+                                       (m_state.italic ? TVP_TF_ITALIC : 0)),
+      .Angle  = 0,
+      .Face   = m_state.face, // TODO: this may fuck up the font settings by
+                              // forcing the fallback font (in most cases)
+  };
+
+  rasterizer->ApplyFont(font);
 }
 
 void TextRenderBase::done() {
