@@ -470,6 +470,8 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         TVPAddLog(
             TVPFormatMessage(TJS_W("change font face name: %1"), faceName));
 
+        m_state.face = faceName;
+
         break;
       }
       // FIXME: per character; not per segment
@@ -485,6 +487,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
           TVPAddLog(TJS_W("set bold"));
         else
           TVPAddLog(TJS_W("unset bold"));
+
+        m_state.bold = flag;
+
         break;
       }
       case 'i': {
@@ -498,6 +503,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
           TVPAddLog(TJS_W("set italic (oblique)"));
         else
           TVPAddLog(TJS_W("unset italic (oblique)"));
+
+        m_state.italic = flag;
+
         break;
       }
       case 's': {
@@ -511,6 +519,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
           TVPAddLog(TJS_W("set shadow"));
         else
           TVPAddLog(TJS_W("unset shadow"));
+
+        m_state.shadow = flag;
+
         break;
       }
       case 'e': {
@@ -525,6 +536,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
           TVPAddLog(TJS_W("set edge"));
         else
           TVPAddLog(TJS_W("unset edge"));
+
+        m_state.edge = flag;
+
         break;
       }
       case 'B': // Big
@@ -605,6 +619,15 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
       case '9': {
         int value = static_cast<int>(ch - '0');
         read_integer(text, i, value);
+
+        // font size
+        m_state.fontSize = m_default.fontSize * value / 100;
+
+        TVPAddLog(
+            TVPFormatMessage(TJS_W("new font size: %1 px"), m_state.fontSize));
+
+        // TODO: apply the font size to rasterizer
+
         break;
       }
       default:
@@ -757,6 +780,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
     default:
     __draw_normal:
       // タダの文字として処理する
+      // TODO: character should include format options;
+      //       as the font is lazy-evaluated/drawn
+      //       (restrictions for line-breaking algorithm)
       pushCharacter(ch);
       break;
     }
