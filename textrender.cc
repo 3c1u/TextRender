@@ -348,8 +348,10 @@ private:
   int m_x = 0;
   int m_y = 0;
 
-  int  m_indent   = 0;
-  bool m_overflow = false;
+  int  m_indent            = 0;
+  bool m_autoIndent        = false;
+  bool m_overflow          = false;
+  bool m_isBeginningOfLine = true;
 
   bool m_vertical = false;
 
@@ -362,7 +364,8 @@ private:
   uint32_t                   m_mode = 0;
 
   void pushCharacter(tjs_char ch);
-  void flush();
+  void performLinebreak();
+  void flush(bool force = false);
 };
 
 constexpr size_t kTextRenderMaxSegmentLength = 2;
@@ -469,6 +472,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
 
         break;
       }
+      // FIXME: per character; not per segment
       case 'b': // フォントの装飾
       {
         if (!readchar(text, i, ch) && (ch == '0' || ch == '1')) {
@@ -621,23 +625,29 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
       switch (ch) {
       case 'n':
         //　改行
+        flush();
+        performLinebreak();
         break;
       case 't':
         // タブ
+        pushCharacter('\t');
         break;
       case 'i':
-        // インデント開始
+        m_indent = m_x;
         break;
       case 'r':
-        // インデント解除
+        m_indent = 0;
         break;
       case 'w':
-        // 空白相当分表示位置を進める
+        pushCharacter(' ');
         break;
       case 'k':
         // キー待ち
+        //
         break;
       case 'x':
+        // nul文字
+        // unknown behaviour: possible UB
         break;
       default:
         goto __draw_normal; // chをふつうの文字列として描画する
@@ -755,6 +765,13 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
   return !m_overflow;
 }
 
+void TextRenderBase::performLinebreak() {
+  auto rasterizer     = GetCurrentRasterizer();
+  m_x                 = m_indent;
+  m_isBeginningOfLine = true;
+  m_y += rasterizer->GetAscentHeight();
+}
+
 void TextRenderBase::pushCharacter(tjs_char ch) {
   if ((0xD800 <= ch && ch <= 0xDBFF) /* upper surrogate-pair */
       || (0xDC00 <= ch && ch <= 0xDFFF) /* lower surrogate-pair */) {
@@ -769,42 +786,6 @@ void TextRenderBase::pushCharacter(tjs_char ch) {
 
   uint32_t current;
 
-  auto rasterizer = GetCurrentRasterizer();
-  int  advance_width, advance_height;
-
-  rasterizer->GetTextExtent(ch, advance_width, advance_height);
-
-  auto new_x       = advance_width + m_x;
-  auto text_height = rasterizer->GetAscentHeight();
-
-  if (m_boxWidth < new_x) {
-    m_x   = 0;
-    new_x = advance_width;
-    m_y += text_height;
-  }
-
-  CharacterInfo info{
-      .bold     = m_state.bold,
-      .italic   = m_state.italic,
-      .graph    = false,
-      .vertical = false,
-      .face     = TJS_W("user"),
-      .x        = m_x,
-      .y        = m_y,
-      .cw       = advance_width,
-      .size     = text_height,
-      .color    = m_state.chColor,
-      .edge =
-          m_state.edge ? std::make_optional(m_state.edgeColor) : (std::nullopt),
-      .shadow = m_state.shadow ? std::make_optional(m_state.shadowColor)
-                               : (std::nullopt),
-      .text = (tjs_string() + ch),
-  };
-
-  m_characters.push_back(info);
-
-  m_x = new_x;
-
   if (isLeadingChar) {
     current = kTextRenderModeLeading;
   } else if (isFollowingChar) {
@@ -815,33 +796,106 @@ void TextRenderBase::pushCharacter(tjs_char ch) {
 
   switch (current) {
   case kTextRenderModeLeading:
+    if (m_mode != kTextRenderModeLeading) {
+      flush();
+    }
+    m_buffer += ch;
     break;
   case kTextRenderModeNormal:
+    if (m_mode != kTextRenderModeLeading) {
+      flush();
+    }
+    m_buffer += ch;
     break;
   case kTextRenderModeFollowing:
+    m_buffer += ch;
     break;
   default:
     TVPThrowExceptionMessage(TJS_W("unreachable code"));
     break;
   }
 
-  m_mode = current;
+  if (m_autoIndent) { // auto-indent option should not be disregarded
+    // pre-indent
+    // if (m_isBeginningOfLine) {
+    //
+    // }
 
-  if (isIndent) {
-    ++m_indent;
+    if (isIndent) {
+      flush();
+      m_indent = m_x;
+
+      // TODO: register pair
+    }
+
+    if (isIndentDecr && m_indent > 0) {
+      // TODO: don't reset when not pair
+      flush();
+      m_indent = 0;
+    }
   }
 
-  if (isIndentDecr && m_indent > 0) {
-    --m_indent;
-  }
+  m_mode              = current;
+  m_isBeginningOfLine = false;
 }
 
-void TextRenderBase::flush() {
+void TextRenderBase::flush(bool force) {
   if (m_buffer.empty()) {
     return;
   }
 
-  // try
+  // try place all characters in the same line
+
+  auto rasterizer = GetCurrentRasterizer();
+  int  advance_width, advance_height;
+
+  auto                       x = m_x;
+  std::vector<CharacterInfo> characters{};
+
+  for (auto const ch : m_buffer) {
+    rasterizer->GetTextExtent(ch, advance_width, advance_height);
+
+    auto new_x       = advance_width + x;
+    auto text_height = rasterizer->GetAscentHeight();
+
+    if (m_boxWidth < new_x) {
+      if (force) {
+        performLinebreak();
+        x     = m_x;
+        new_x = advance_width + x;
+      } else {
+        performLinebreak();
+        flush(true);
+        return;
+      }
+    }
+
+    CharacterInfo info{
+        .bold     = m_state.bold,
+        .italic   = m_state.italic,
+        .graph    = false,
+        .vertical = false,
+        .face     = m_state.face,
+        .x        = x,
+        .y        = m_y,
+        .cw       = advance_width,
+        .size     = text_height,
+        .color    = m_state.chColor,
+        .edge     = m_state.edge ? std::make_optional(m_state.edgeColor)
+                             : (std::nullopt),
+        .shadow = m_state.shadow ? std::make_optional(m_state.shadowColor)
+                                 : (std::nullopt),
+        .text = (tjs_string() + ch),
+    };
+
+    characters.push_back(info);
+
+    x = new_x;
+  }
+
+  m_x = x;
+  m_characters.insert(m_characters.end(), characters.begin(), characters.end());
+  m_buffer.clear();
 }
 
 void TextRenderBase::setRenderSize(int width, int height) {
@@ -888,8 +942,11 @@ void TextRenderBase::clear() {
   m_overflow = false;
 
   // カーソル位置を戻す
-  m_x = 0;
-  m_y = 0;
+  m_x      = 0;
+  m_y      = 0;
+  m_indent = 0;
+
+  m_isBeginningOfLine = true;
 
   // ラスタライザを指定された書式で初期化
   auto rasterizer = GetCurrentRasterizer();
