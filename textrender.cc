@@ -415,6 +415,7 @@ private:
   uint32_t                   m_mode = 0;
 
   void pushCharacter(tjs_char ch);
+  void pushGraphicalCharacter(tjs_string const& graph);
   void performLinebreak();
   void flush(bool force = false);
   void updateFont();
@@ -524,7 +525,6 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
 
         break;
       }
-      // FIXME: per character; not per segment
       case 'b': // フォントの装飾
       {
         if (!readchar(text, i, ch) && (ch == '0' || ch == '1')) {
@@ -676,7 +676,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         dbg_print(
             TVPFormatMessage(TJS_W("new font size: %1 px"), m_state.fontSize));
 
-        // TODO: apply the font size to rasterizer
+        updateFont();
 
         break;
       }
@@ -802,8 +802,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         graph += ch;
       }
 
-      // TODO: implement graphical characters
-
+      pushGraphicalCharacter(graph);
       break;
     }
     case '$': {
@@ -846,6 +845,10 @@ void TextRenderBase::performLinebreak() {
   m_x                 = m_indent;
   m_isBeginningOfLine = true;
   m_y += rasterizer->GetAscentHeight() + m_state.lineSpacing;
+}
+
+void pushGraphicalCharacter(tjs_string const& graph) {
+  // TODO: implement graphical characters
 }
 
 void TextRenderBase::pushCharacter(tjs_char ch) {
@@ -904,7 +907,7 @@ void TextRenderBase::pushCharacter(tjs_char ch) {
   if (m_autoIndent) {
     // pre-indent
     if (m_isBeginningOfLine && m_autoIndent < 0) {
-      // do something
+      m_x -= advance_width;
     }
 
     if (isIndent) {
@@ -929,14 +932,11 @@ void TextRenderBase::flush(bool force) {
 
   // try place all characters in the same line
 
-  auto rasterizer = GetCurrentRasterizer();
-
   auto x = m_x;
 
   for (auto &ch : m_buffer) {
     auto advance_width = ch.cw;
     auto new_x         = advance_width + x + m_state.pitch;
-    auto text_height   = rasterizer->GetAscentHeight();
 
     if (m_boxWidth < new_x) {
       if (force) {
@@ -948,10 +948,6 @@ void TextRenderBase::flush(bool force) {
         flush(true);
         return;
       }
-    }
-
-    if (ch.size != text_height) {
-      updateFont();
     }
 
     ch.x = x;
@@ -986,7 +982,7 @@ void TextRenderBase::setOption(tTJSVariant options) {
 }
 
 tTJSVariant TextRenderBase::getCharacters(int start, int end) {
-  // TODO:
+  // TODO: only (0, 0) is observed
   auto array = TJSCreateArrayObject();
   dbg_print(TVPFormatMessage(TJS_W("get characters: [%1, %2]"), start, end));
 
@@ -995,6 +991,8 @@ tTJSVariant TextRenderBase::getCharacters(int start, int end) {
       auto ch = m_characters[i].serialize();
       array->PropSetByNum(TJS_MEMBERENSURE, i, &ch, array);
     }
+  } else {
+    // TODO: unknown behaviour
   }
 
   return tTJSVariant(array, array);
@@ -1034,7 +1032,6 @@ void TextRenderBase::updateFont() {
 }
 
 void TextRenderBase::done() {
-  // TODO:
   dbg_print(TJS_W("flush character buffer"));
   flush();
 }
