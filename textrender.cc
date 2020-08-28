@@ -326,6 +326,23 @@ struct CharacterInfo {
   }
 };
 
+#define property_accessor(name, type, storage)                                 \
+  type get_##name() const { return storage; }                                  \
+  void set_##name(type v) { storage = v; }
+
+#define property_accessor_cast(name, type, cast, storage)                      \
+  cast get_##name() const { return cast(storage); }                            \
+  void set_##name(cast v) { storage = type(v); }
+
+#define property_accessor_string(name, storage)                                \
+  tTJSVariant get_##name() const { return tTJSVariant(storage); }              \
+  void        set_##name(tTJSVariant v) {                                      \
+    auto s  = v.AsStringNoAddRef();                                     \
+    storage = s->LongString ? s->LongString : s->ShortString;           \
+  }
+
+#define property_delegate(name) NCB_PROPERTY(name, get_##name, set_##name);
+
 /**
  * @brief The base of the TextRender class. This only performs the text
  * layouting and the line breaking (禁則処理)．
@@ -344,8 +361,36 @@ public:
   void        done();
 
   // property accessor
-  bool getVertical() const { return m_vertical; }
-  void setVertical(bool v) { m_vertical = v; }
+  property_accessor(vertical, bool, m_vertical);
+
+  property_accessor(bold, bool, m_state.bold);
+  property_accessor(italic, bool, m_state.italic);
+  property_accessor_string(face, m_state.face);
+  property_accessor(fontSize, int, m_state.fontSize);
+  property_accessor_cast(chColor, RgbColor, tjs_int, m_state.chColor);
+  property_accessor(rubySize, int, m_state.rubySize);
+  property_accessor(rubyOffset, int, m_state.rubyOffset);
+  property_accessor(shadow, bool, m_state.shadow);
+  property_accessor_cast(shadowColor, RgbColor, tjs_int, m_state.shadowColor);
+  property_accessor(edge, bool, m_state.edge);
+  property_accessor(lineSpacing, int, m_state.lineSpacing);
+  property_accessor(pitch, int, m_state.pitch);
+  property_accessor(lineSize, int, m_state.lineSize);
+
+  property_accessor(defaultBold, bool, m_default.bold);
+  property_accessor(defaultItalic, bool, m_default.italic);
+  property_accessor_string(defaultFace, m_default.face);
+  property_accessor(defaultFontSize, int, m_default.fontSize);
+  property_accessor_cast(defaultChColor, RgbColor, tjs_int, m_default.chColor);
+  property_accessor(defaultRubySize, int, m_default.rubySize);
+  property_accessor(defaultRubyOffset, int, m_default.rubyOffset);
+  property_accessor(defaultShadow, bool, m_default.shadow);
+  property_accessor_cast(defaultShadowColor, RgbColor, tjs_int,
+                         m_default.shadowColor);
+  property_accessor(defaultEdge, bool, m_default.edge);
+  property_accessor(defaultLineSpacing, int, m_default.lineSpacing);
+  property_accessor(defaultPitch, int, m_default.pitch);
+  property_accessor(defaultLineSize, int, m_default.lineSize);
 
 private:
   int m_boxWidth  = 0;
@@ -1006,5 +1051,32 @@ NCB_REGISTER_CLASS(TextRenderBase) {
   NCB_METHOD(clear);
   NCB_METHOD(done);
 
-  NCB_PROPERTY(vertical, getVertical, setVertical);
+  property_delegate(vertical);
+  property_delegate(bold);
+  property_delegate(italic);
+  property_delegate(face);
+  property_delegate(fontSize);
+  property_delegate(chColor);
+  property_delegate(rubySize);
+  property_delegate(rubyOffset);
+  property_delegate(shadow);
+  property_delegate(shadowColor);
+  property_delegate(edge);
+  property_delegate(lineSpacing);
+  property_delegate(pitch);
+  property_delegate(lineSize);
+
+  property_delegate(defaultBold);
+  property_delegate(defaultItalic);
+  property_delegate(defaultFace);
+  property_delegate(defaultFontSize);
+  property_delegate(defaultChColor);
+  property_delegate(defaultRubySize);
+  property_delegate(defaultRubyOffset);
+  property_delegate(defaultShadow);
+  property_delegate(defaultShadowColor);
+  property_delegate(defaultEdge);
+  property_delegate(defaultLineSpacing);
+  property_delegate(defaultPitch);
+  property_delegate(defaultLineSize);
 };
