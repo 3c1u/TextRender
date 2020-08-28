@@ -355,7 +355,7 @@ private:
   int m_y = 0;
 
   int  m_indent            = 0;
-  bool m_autoIndent        = false;
+  int  m_autoIndent        = 0;
   bool m_overflow          = false;
   bool m_isBeginningOfLine = true;
 
@@ -365,16 +365,15 @@ private:
   TextRenderState   m_default{};
   TextRenderState   m_state{};
 
-  std::vector<CharacterInfo> m_characters;
-  tjs_string                 m_buffer{};
+  std::vector<CharacterInfo> m_characters{};
+  std::vector<CharacterInfo> m_buffer{};
   uint32_t                   m_mode = 0;
 
   void pushCharacter(tjs_char ch);
   void performLinebreak();
   void flush(bool force = false);
+  void updateFont();
 };
-
-constexpr size_t kTextRenderMaxSegmentLength = 2;
 
 enum TextRenderAlignment {
   kTextRenderAlignmentLeft   = -1,
@@ -826,43 +825,50 @@ void TextRenderBase::pushCharacter(tjs_char ch) {
     current = kTextRenderModeNormal;
   }
 
-  switch (current) {
-  case kTextRenderModeLeading:
-    if (m_mode != kTextRenderModeLeading) {
-      flush();
-    }
-    m_buffer += ch;
-    break;
-  case kTextRenderModeNormal:
-    if (m_mode != kTextRenderModeLeading) {
-      flush();
-    }
-    m_buffer += ch;
-    break;
-  case kTextRenderModeFollowing:
-    m_buffer += ch;
-    break;
-  default:
-    TVPThrowExceptionMessage(TJS_W("unreachable code"));
-    break;
+  if (m_mode == kTextRenderModeFollowing || m_mode != kTextRenderModeLeading) {
+    flush();
   }
 
-  if (m_autoIndent) { // auto-indent option should not be disregarded
+  auto rasterizer  = GetCurrentRasterizer();
+  auto text_height = rasterizer->GetAscentHeight();
+
+  int advance_width = 0, advance_height = 0;
+
+  rasterizer->GetTextExtent(ch, advance_width, advance_height);
+
+  CharacterInfo info{
+      .bold     = m_state.bold,
+      .italic   = m_state.italic,
+      .graph    = false,
+      .vertical = false,
+      .face     = m_state.face,
+      .x        = 0,
+      .y        = 0,
+      .cw       = advance_width,
+      .size     = text_height,
+      .color    = m_state.chColor,
+      .edge =
+          m_state.edge ? std::make_optional(m_state.edgeColor) : (std::nullopt),
+      .shadow = m_state.shadow ? std::make_optional(m_state.shadowColor)
+                               : (std::nullopt),
+      .text = (tjs_string() + ch),
+  };
+
+  m_buffer.push_back(std::move(info));
+
+  if (m_autoIndent) {
     // pre-indent
-    // if (m_isBeginningOfLine) {
-    //
-    // }
+    if (m_isBeginningOfLine && m_autoIndent < 0) {
+      // do something
+    }
 
     if (isIndent) {
-      flush();
-      m_indent = m_x;
-
+      m_indent = m_x + advance_width;
       // TODO: register pair
     }
 
     if (isIndentDecr && m_indent > 0) {
-      // TODO: don't reset when not pair
-      flush();
+      flush(); // FIXME: not safe?
       m_indent = 0;
     }
   }
@@ -879,16 +885,13 @@ void TextRenderBase::flush(bool force) {
   // try place all characters in the same line
 
   auto rasterizer = GetCurrentRasterizer();
-  int  advance_width, advance_height;
 
-  auto                       x = m_x;
-  std::vector<CharacterInfo> characters{};
+  auto x = m_x;
 
-  for (auto const ch : m_buffer) {
-    rasterizer->GetTextExtent(ch, advance_width, advance_height);
-
-    auto new_x       = advance_width + x + m_state.pitch;
-    auto text_height = rasterizer->GetAscentHeight();
+  for (auto &ch : m_buffer) {
+    auto advance_width = ch.cw;
+    auto new_x         = advance_width + x + m_state.pitch;
+    auto text_height   = rasterizer->GetAscentHeight();
 
     if (m_boxWidth < new_x) {
       if (force) {
@@ -902,31 +905,18 @@ void TextRenderBase::flush(bool force) {
       }
     }
 
-    CharacterInfo info{
-        .bold     = m_state.bold,
-        .italic   = m_state.italic,
-        .graph    = false,
-        .vertical = false,
-        .face     = m_state.face,
-        .x        = x,
-        .y        = m_y,
-        .cw       = advance_width,
-        .size     = text_height,
-        .color    = m_state.chColor,
-        .edge     = m_state.edge ? std::make_optional(m_state.edgeColor)
-                             : (std::nullopt),
-        .shadow = m_state.shadow ? std::make_optional(m_state.shadowColor)
-                                 : (std::nullopt),
-        .text = (tjs_string() + ch),
-    };
+    if (ch.size != text_height) {
+      updateFont();
+    }
 
-    characters.push_back(info);
+    ch.x = x;
+    ch.y = m_y;
 
     x = new_x;
   }
 
   m_x = x;
-  m_characters.insert(m_characters.end(), characters.begin(), characters.end());
+  m_characters.insert(m_characters.end(), m_buffer.begin(), m_buffer.end());
   m_buffer.clear();
 }
 
@@ -981,6 +971,10 @@ void TextRenderBase::clear() {
   m_isBeginningOfLine = true;
 
   // ラスタライザを指定された書式で初期化
+  updateFont();
+}
+
+void TextRenderBase::updateFont() {
   auto rasterizer = GetCurrentRasterizer();
   auto font       = tTVPFont{
       .Height = m_state.fontSize, // height of text
