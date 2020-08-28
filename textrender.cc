@@ -850,7 +850,7 @@ void TextRenderBase::performLinebreak() {
   m_y += rasterizer->GetAscentHeight() + m_state.lineSpacing;
 }
 
-void pushGraphicalCharacter(tjs_string const& graph) {
+void TextRenderBase::pushGraphicalCharacter(tjs_string const& graph) {
   // TODO: implement graphical characters
 }
 
