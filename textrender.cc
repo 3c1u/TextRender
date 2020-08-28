@@ -591,43 +591,44 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
 
         break;
       }
-      case 'B': // Big
+      case 'B': // TODO: Big
         dbg_print(TJS_W("big font"));
         break;
-      case 'S': // Small
+      case 'S': // TODO: Small
         dbg_print(TJS_W("small font"));
         break;
       case 'r': // Reset
         dbg_print(TJS_W("reset"));
+        m_state = m_default;
         break;
-      case 'C': // Centre
+      case 'C': // TODO: Centre
         dbg_print(TJS_W("centre"));
         break;
-      case 'R': // Right
+      case 'R': // TODO: Right
         dbg_print(TJS_W("right"));
         break;
-      case 'L': // Left
+      case 'L': // TODO: Left
         dbg_print(TJS_W("left"));
         break;
       case 'p': // ピッチ，%p[0-9]+;
       {
         int value = 0;
         read_integer(text, i, value);
-        //
+        m_state.pitch = value;
         break;
       }
       case 'd': // 文字あたり表示時間指定，%d[0-9]+;
       {
         int value = 0;
         read_integer(text, i, value);
-        //
+        // TODO: text speed
         break;
       }
       case 'w': // 時間待ち，%w[0-9]+;
       {
         int value = 0;
         read_integer(text, i, value);
-        //
+        // TODO: wait
         break;
       }
       case 'D': // %D[0-9]+; || %D$.+;
@@ -648,11 +649,13 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
             labelName += ch;
           }
 
-          // labelName
+          // TODO: labelName
 
         } else {
           int value = 0;
           read_integer(text, i, value);
+
+          // TODO: label?
         }
         //
         break;
@@ -715,11 +718,11 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         pushCharacter(' ');
         break;
       case 'k':
-        // キー待ち
+        // TODO: キー待ち
         //
         break;
       case 'x':
-        // nul文字
+        // TODO: nul文字
         // unknown behaviour: possible UB
         break;
       default:
