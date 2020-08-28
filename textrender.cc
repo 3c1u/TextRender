@@ -58,6 +58,12 @@
 
 #include <optional>
 
+#if 0
+#define dbg_print TVPAddLog
+#else
+#define dbg_print(...)
+#endif
+
 // use Kirikiri-Z rasterizer for layouting
 #include "FontRasterizer.h"
 FontRasterizer *GetCurrentRasterizer();
@@ -144,7 +150,7 @@ struct TextRenderState {
   bool       edge        = false;         // 縁取り
   RgbColor   edgeColor   = 0x0080ff;      // 縁の色
   int        lineSpacing = 6;             // 行間
-  int        pitch       = 0;             // 行間
+  int        pitch       = 0;             // 字間
   int        lineSize    = 0;             // ラインの高さ
 
   // -------------------------------------------------------------- //
@@ -467,7 +473,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
           faceName += ch;
         }
 
-        TVPAddLog(
+        dbg_print(
             TVPFormatMessage(TJS_W("change font face name: %1"), faceName));
 
         m_state.face = faceName;
@@ -484,9 +490,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         }
         bool flag = ch == '1';
         if (flag)
-          TVPAddLog(TJS_W("set bold"));
+          dbg_print(TJS_W("set bold"));
         else
-          TVPAddLog(TJS_W("unset bold"));
+          dbg_print(TJS_W("unset bold"));
 
         m_state.bold = flag;
 
@@ -500,9 +506,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         }
         bool flag = ch == '1';
         if (flag)
-          TVPAddLog(TJS_W("set italic (oblique)"));
+          dbg_print(TJS_W("set italic (oblique)"));
         else
-          TVPAddLog(TJS_W("unset italic (oblique)"));
+          dbg_print(TJS_W("unset italic (oblique)"));
 
         m_state.italic = flag;
 
@@ -516,9 +522,9 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         }
         bool flag = ch == '1';
         if (flag)
-          TVPAddLog(TJS_W("set shadow"));
+          dbg_print(TJS_W("set shadow"));
         else
-          TVPAddLog(TJS_W("unset shadow"));
+          dbg_print(TJS_W("unset shadow"));
 
         m_state.shadow = flag;
 
@@ -533,31 +539,31 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         }
         bool flag = ch == '1';
         if (flag)
-          TVPAddLog(TJS_W("set edge"));
+          dbg_print(TJS_W("set edge"));
         else
-          TVPAddLog(TJS_W("unset edge"));
+          dbg_print(TJS_W("unset edge"));
 
         m_state.edge = flag;
 
         break;
       }
       case 'B': // Big
-        TVPAddLog(TJS_W("big font"));
+        dbg_print(TJS_W("big font"));
         break;
       case 'S': // Small
-        TVPAddLog(TJS_W("small font"));
+        dbg_print(TJS_W("small font"));
         break;
       case 'r': // Reset
-        TVPAddLog(TJS_W("reset"));
+        dbg_print(TJS_W("reset"));
         break;
       case 'C': // Centre
-        TVPAddLog(TJS_W("centre"));
+        dbg_print(TJS_W("centre"));
         break;
       case 'R': // Right
-        TVPAddLog(TJS_W("right"));
+        dbg_print(TJS_W("right"));
         break;
       case 'L': // Left
-        TVPAddLog(TJS_W("left"));
+        dbg_print(TJS_W("left"));
         break;
       case 'p': // ピッチ，%p[0-9]+;
       {
@@ -623,7 +629,7 @@ bool TextRenderBase::render(tTJSString text, int autoIndent, int diff, int all,
         // font size
         m_state.fontSize = m_default.fontSize * value / 100;
 
-        TVPAddLog(
+        dbg_print(
             TVPFormatMessage(TJS_W("new font size: %1 px"), m_state.fontSize));
 
         // TODO: apply the font size to rasterizer
@@ -795,7 +801,7 @@ void TextRenderBase::performLinebreak() {
   auto rasterizer     = GetCurrentRasterizer();
   m_x                 = m_indent;
   m_isBeginningOfLine = true;
-  m_y += rasterizer->GetAscentHeight();
+  m_y += rasterizer->GetAscentHeight() + m_state.lineSpacing;
 }
 
 void TextRenderBase::pushCharacter(tjs_char ch) {
@@ -881,14 +887,14 @@ void TextRenderBase::flush(bool force) {
   for (auto const ch : m_buffer) {
     rasterizer->GetTextExtent(ch, advance_width, advance_height);
 
-    auto new_x       = advance_width + x;
+    auto new_x       = advance_width + x + m_state.pitch;
     auto text_height = rasterizer->GetAscentHeight();
 
     if (m_boxWidth < new_x) {
       if (force) {
         performLinebreak();
         x     = m_x;
-        new_x = advance_width + x;
+        new_x = advance_width + x + m_state.pitch;
       } else {
         performLinebreak();
         flush(true);
@@ -928,26 +934,26 @@ void TextRenderBase::setRenderSize(int width, int height) {
   m_boxWidth  = width;
   m_boxHeight = height;
 
-  TVPAddLog(
+  dbg_print(
       TVPFormatMessage(TJS_W("set render size: (%1, %2)"), width, height));
 
   clear();
 }
 
 void TextRenderBase::setDefault(tTJSVariant defaultSettings) {
-  TVPAddLog(TJS_W("set default format"));
+  dbg_print(TJS_W("set default format"));
   m_default.deserialize(defaultSettings);
 }
 
 void TextRenderBase::setOption(tTJSVariant options) {
-  TVPAddLog(TJS_W("set option"));
+  dbg_print(TJS_W("set option"));
   m_options.deserialize(options);
 }
 
 tTJSVariant TextRenderBase::getCharacters(int start, int end) {
   // TODO:
   auto array = TJSCreateArrayObject();
-  TVPAddLog(TVPFormatMessage(TJS_W("get characters: [%1, %2]"), start, end));
+  dbg_print(TVPFormatMessage(TJS_W("get characters: [%1, %2]"), start, end));
 
   if ((end < start) || (start == 0 && end == 0)) {
     for (size_t i = 0, cnt = m_characters.size(); i < cnt; ++i) {
@@ -960,7 +966,7 @@ tTJSVariant TextRenderBase::getCharacters(int start, int end) {
 }
 
 void TextRenderBase::clear() {
-  TVPAddLog(TJS_W("clear character buffer and format"));
+  dbg_print(TJS_W("clear character buffer and format"));
 
   m_characters.clear();
 
@@ -990,7 +996,7 @@ void TextRenderBase::clear() {
 
 void TextRenderBase::done() {
   // TODO:
-  TVPAddLog(TJS_W("flush character buffer"));
+  dbg_print(TJS_W("flush character buffer"));
   flush();
 }
 
